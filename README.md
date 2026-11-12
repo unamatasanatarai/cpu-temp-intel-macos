@@ -29,19 +29,43 @@ macOS has no built-in command that prints the CPU temperature. The usual workaro
 |---|---|
 | **Script-ready output** | Prints one number with one decimal place, followed by a newline. No labels, units or banners to strip out. |
 | **Die temperature first** | It tries the CPU die sensors first (`TC0D`, `TC0F`, `TC0E`, `TC0H`). It only falls back to the proximity sensor `TC0P`, which can read 30–40 °C lower under load, when no die sensor is available. |
-| **Sanity-checked readings** | It accepts only valid `sp78` temperature keys with readings between 0 and 150 °C, so a bad or missing sensor won't produce a misleading number. |
+| **Sanity-checked readings** | It accepts only temperature-typed keys (signed fixed-point such as `sp78`, or 32-bit float) with readings between 0 and 150 °C, so a bad or missing sensor won't produce a misleading number. |
 | **Celsius or Fahrenheit** | Pass `-f` to get Fahrenheit. |
 | **Reliable exit codes** | Exits `0` only when a valid temperature was written. Unknown flags, stray arguments, a missing SMC, no usable sensor and failed output writes all exit `1`, with the error on stderr. |
-| **Tiny and native** | About 130 lines of C that talk to IOKit directly. It needs only Apple's built-in IOKit framework. |
+| **Tiny and native** | A few hundred lines of C that talk to IOKit directly, with the SMC code shared in `smc.c`. It needs only Apple's built-in IOKit framework. |
 
 ## How It Works
 
 ```text
 1. Open a connection to the AppleSMC service through IOKit
 2. Query each CPU temperature key in priority order
-3. Check that the key is a signed 8.8 fixed-point (sp78) value
+3. Check that the key holds a temperature type: signed fixed-point (e.g. sp78) or 32-bit float
 4. Return the first reading between 0 and 150 °C
 5. Print it to stdout in °C, or in °F with -f
+```
+
+## See Every Sensor: `osxtemps`
+
+When one number isn't enough, `osxtemps` walks every key the SMC exposes and lists each temperature sensor that returns a plausible reading (0–150 °C). The output has one line per sensor: the SMC key, the value, and a description for keys it recognizes.
+
+```console
+$ osxtemps
+TA0P   38.1  Ambient
+TB0T   34.9  Battery (max)
+TC0E   77.6  CPU die (PECI, filtered)
+TC0P   57.8  CPU proximity
+TC1C   72.0  CPU core 1
+TH0x   38.6  Drive (max)
+TM0P   49.2  Memory proximity
+TPCD   60.0  Platform controller hub die
+Ts0P   33.4  Palm rest
+...
+```
+
+It reads signed fixed-point keys (`sp78` and related types) and the 32-bit float keys used by T2 Macs (the float path is not yet verified on T2 hardware). Unknown keys are still listed, just without a description. `-f` switches to Fahrenheit. Exit codes follow the same rules as `cputemp`.
+
+```bash
+osxtemps | awk '$1 == "TPCD" { print $2 }'   # pick out one sensor
 ```
 
 ## Use It in Scripts
@@ -64,9 +88,10 @@ git clone https://github.com/unamatasanatarai/cpu-temp-intel-macos.git
 cd cpu-temp-intel-macos
 make
 ./cputemp
+./osxtemps
 ```
 
-To install it system-wide in `/usr/local/bin`:
+To install both binaries system-wide in `/usr/local/bin`:
 
 ```bash
 sudo make install
@@ -96,15 +121,16 @@ Usage: cputemp [-f]
 - The Celsius reading falls within a plausible 20–110 °C range
 - The `-f` output matches the Celsius reading after conversion
 - A closed stdout produces exit `1` instead of a false success
+- Every `osxtemps` line is well-formed, `-f` lists the same sensors, and it follows the same flag and exit-code rules
 
 ## Make Targets
 
 | Command | Description |
 |---------|-------------|
-| `make` | Build `cputemp` with `clang -O2 -Wall -Wextra` |
-| `make test` | Build the binary, then run the regression suite |
-| `make install` | Install the binary to `/usr/local/bin/cputemp` |
-| `make clean` | Remove the built binary |
+| `make` | Build `cputemp` and `osxtemps` with `clang -O2 -Wall -Wextra` |
+| `make test` | Build both binaries, then run the regression suite |
+| `make install` | Install both binaries to `/usr/local/bin` |
+| `make clean` | Remove the built binaries |
 
 ## License
 

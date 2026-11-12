@@ -1,13 +1,23 @@
-cputemp: cputemp.c
-	clang -O2 -Wall -Wextra -o $@ $< -framework IOKit
+CC = clang
+CFLAGS = -O2 -Wall -Wextra
+LDLIBS = -framework IOKit
+BINS = cputemp osxtemps
 
-test: cputemp
+all: $(BINS)
+
+cputemp: cputemp.c smc.c smc.h
+	$(CC) $(CFLAGS) -o $@ cputemp.c smc.c $(LDLIBS)
+
+osxtemps: osxtemps.c smc.c smc.h
+	$(CC) $(CFLAGS) -o $@ osxtemps.c smc.c $(LDLIBS)
+
+test: $(BINS)
 	./test.sh
 
-install: cputemp
-	install -m 755 cputemp /usr/local/bin/cputemp
+install: $(BINS)
+	install -m 755 $(BINS) /usr/local/bin/
 
 clean:
-	rm -f cputemp
+	rm -f $(BINS)
 
-.PHONY: test install clean
+.PHONY: all test install clean
